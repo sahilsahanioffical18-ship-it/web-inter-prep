@@ -70,9 +70,9 @@
                     <i class="fas fa-file-alt text-warning display-4 mb-3"></i>
                     <h5 class="card-title">Resume Builder</h5>
                     <p class="card-text">Create professional resumes with our AI-powered builder. Get tips and suggestions to make your resume stand out.</p>
-                    <button class="btn btn-warning" onclick="showComingSoon('Resume Builder')" disabled>
-                        <i class="fas fa-clock me-2"></i>Coming Soon
-                    </button>
+                    <a href="{{ url_for('resume_builder') if session.user_id else url_for('login') }}" class="btn btn-warning">
+                        <i class="fas fa-file-alt me-2"></i>Open Builder
+                    </a>
                 </div>
             </div>
         </div>

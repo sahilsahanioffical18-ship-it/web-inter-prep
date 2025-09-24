@@ -5,7 +5,7 @@ Main Flask Application File
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from authlib.integrations.flask_client import OAuth
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import requests
 import sqlite3
 import json
@@ -14,7 +14,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import random
 
-load_dotenv()
+# Load environment variables from the nearest .env (project root)
+load_dotenv(find_dotenv())
 app = Flask(__name__, template_folder="../frontend/templates", static_folder="../frontend/static")
 app.secret_key = 'your-secret-key-change-in-production'  # Change this in production
 
@@ -253,7 +254,11 @@ def login_google():
     if 'google' not in oauth._clients:
         flash('Google Sign-In not configured on server', 'error')
         return redirect(url_for('login'))
-    redirect_uri = url_for('auth_google_callback', _external=True)
+    # Build redirect URI using the same host the user is currently using
+    # to avoid session/CSRF state issues between localhost and 127.0.0.1
+    from flask import request
+    base = request.host_url.rstrip('/')  # e.g., http://127.0.0.1:8081 or http://localhost:8081
+    redirect_uri = base + url_for('auth_google_callback')
     return oauth.google.authorize_redirect(redirect_uri)
 
 @app.route('/auth/google/callback')
@@ -440,6 +445,82 @@ def dsa():
     return render_template('practice.html')
 
 # Old practice API endpoint removed - now using client-side DSA questions
+
+@app.route('/api/generate-solution', methods=['POST'])
+def api_generate_solution():
+    """Generate a DSA solution using Gemini API.
+    Expects JSON: { title, description, difficulty }
+    Returns structured fields: { approach, timeComplexity, spaceComplexity, code, explanation }
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    payload = request.get_json(force=True, silent=True) or {}
+    title = payload.get('title', '')
+    description = payload.get('description', '')
+    difficulty = payload.get('difficulty', '')
+
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not configured on server'}), 500
+
+    prompt = (
+        "You are a senior interview coach. Given a DSA problem, produce a concise, structured solution strictly in JSON with keys: "
+        "approach (2-5 sentences), timeComplexity (Big-O), spaceComplexity (Big-O), code (JavaScript), explanation (4-8 sentences). "
+        "Avoid any backticks or markdown. Problem title: '" + title + "'. Description: '" + description + "'. "
+        "Target difficulty: " + difficulty + ". Prefer optimal common approach used in interviews."
+    )
+
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={
+                'Content-Type': 'application/json',
+                'X-goog-api-key': GEMINI_API_KEY,
+            },
+            json={
+                'contents': [
+                    {
+                        'parts': [
+                            {'text': prompt}
+                        ]
+                    }
+                ]
+            },
+            timeout=20
+        )
+        resp.raise_for_status()
+        api_data = resp.json()
+        text = ''
+        try:
+            text = api_data['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            text = str(api_data)
+
+        # Try to parse JSON. If it fails, wrap into our structure heuristically.
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = {
+                'approach': text[:600],
+                'timeComplexity': 'O(n)',
+                'spaceComplexity': 'O(1)',
+                'code': '// AI response could not be parsed as JSON.\n// Raw output:\n' + text,
+                'explanation': 'AI response returned unstructured text; displaying raw output above.'
+            }
+
+        # Ensure keys exist
+        result = {
+            'approach': parsed.get('approach', ''),
+            'timeComplexity': parsed.get('timeComplexity', ''),
+            'spaceComplexity': parsed.get('spaceComplexity', ''),
+            'code': parsed.get('code', ''),
+            'explanation': parsed.get('explanation', '')
+        }
+        return jsonify(result)
+    except requests.HTTPError as e:
+        return jsonify({'error': f'Gemini API error: {e.response.text[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {e}'}), 500
 
 @app.route('/submit-answer', methods=['POST'])
 def submit_answer():
@@ -754,6 +835,150 @@ def custom_practice():
         return redirect(url_for('login'))
     
     return render_template('custom_practice.html')
+
+@app.route('/resume')
+def resume_builder():
+    """Resume builder page"""
+    if 'user_id' not in session:
+        flash('Please login to access the resume builder', 'error')
+        return redirect(url_for('login'))
+    return render_template('resume_builder.html')
+
+@app.route('/api/resume/summary', methods=['POST'])
+def resume_summary():
+    """Generate a professional summary with Gemini"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not configured on server'}), 500
+
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get('name', '')
+    role = data.get('role', '')
+    years = data.get('years', '')
+    skills = data.get('skills', '')
+    extras = data.get('extras', '')
+
+    prompt = (
+        f"Write a crisp 3-4 sentence professional summary for a resume. Name: {name}. Role: {role}. "
+        f"Experience: {years} years. Key skills: {skills}. Context: {extras}. Tone: confident, concise, ATS-friendly."
+    )
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={'Content-Type': 'application/json','X-goog-api-key': GEMINI_API_KEY},
+            json={'contents':[{'parts':[{'text': prompt}]}]},
+            timeout=20
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        text = ''
+        try:
+            text = body['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            text = str(body)
+        return jsonify({'summary': text.strip()})
+    except requests.HTTPError as e:
+        return jsonify({'error': f'Gemini API error: {e.response.text[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {e}'}), 500
+
+@app.route('/api/resume/skills', methods=['POST'])
+def resume_skills():
+    """Suggest skills list using Gemini"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not configured on server'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    role = data.get('role', '')
+    years = data.get('years', '')
+    base = data.get('base', '')
+    prompt = (
+        f"Provide 10 ATS-friendly comma-separated skills for a {role} with {years} years. "
+        f"Prioritize technical tools, frameworks, and concepts. Start directly with skills."
+        + (f" Include these if relevant: {base}." if base else '')
+    )
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={'Content-Type': 'application/json','X-goog-api-key': GEMINI_API_KEY},
+            json={'contents':[{'parts':[{'text': prompt}]}]}, timeout=20
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        text = ''
+        try:
+            text = body['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            text = str(body)
+        skills = [s.strip() for s in text.replace('\n',' ').split(',') if s.strip()][:10]
+        return jsonify({'skills': skills})
+    except requests.HTTPError as e:
+        return jsonify({'error': f'Gemini API error: {e.response.text[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {e}'}), 500
+
+@app.route('/api/resume/experience', methods=['POST'])
+def resume_experience():
+    """Generate action-oriented experience bullets"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not configured on server'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    role = data.get('role','')
+    years = data.get('years','')
+    skills = data.get('skills','')
+    current = data.get('current','')
+    prompt = (
+        "Write 5 resume bullets for experience using STAR style, action verbs, metrics, and impact. "
+        f"Role: {role}, Years: {years}, Skills: {skills}. Existing text: {current[:400]}"
+    )
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={'Content-Type': 'application/json','X-goog-api-key': GEMINI_API_KEY},
+            json={'contents':[{'parts':[{'text': prompt}]}]}, timeout=20
+        )
+        resp.raise_for_status()
+        text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{'text':''}])[0].get('text','')
+        bullets = [ln.strip(' -*•') for ln in text.split('\n') if ln.strip()][:6]
+        return jsonify({'bullets': bullets})
+    except requests.HTTPError as e:
+        return jsonify({'error': f'Gemini API error: {e.response.text[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {e}'}), 500
+
+@app.route('/api/resume/projects', methods=['POST'])
+def resume_projects():
+    """Generate concise project bullets"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not configured on server'}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    role = data.get('role','')
+    skills = data.get('skills','')
+    current = data.get('current','')
+    prompt = (
+        "Write 4 project bullets with tech stack and measurable outcomes. Each line starts with a verb. "
+        f"Role: {role}. Skills: {skills}. Existing: {current[:400]}"
+    )
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={'Content-Type': 'application/json','X-goog-api-key': GEMINI_API_KEY},
+            json={'contents':[{'parts':[{'text': prompt}]}]}, timeout=20
+        )
+        resp.raise_for_status()
+        text = resp.json().get('candidates',[{}])[0].get('content',{}).get('parts',[{'text':''}])[0].get('text','')
+        bullets = [ln.strip(' -*•') for ln in text.split('\n') if ln.strip()][:5]
+        return jsonify({'bullets': bullets})
+    except requests.HTTPError as e:
+        return jsonify({'error': f'Gemini API error: {e.response.text[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {e}'}), 500
 
 # Error handlers
 @app.errorhandler(404)

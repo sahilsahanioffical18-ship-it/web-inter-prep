@@ -152,6 +152,7 @@
                         <strong>Explanation:</strong>
                         <p class="solution-explanation"></p>
                     </div>
+                    <div class="small text-muted"><i class="fas fa-wand-magic me-1"></i>Powered by Gemini</div>
                 </div>
             </div>
         </div>
@@ -470,8 +471,48 @@ function loadQuestions(category) {
                 }
             });
         } else {
-            // Hide solution button if no solution available
-            questionElement.querySelector('.solution-btn').style.display = 'none';
+            // If no built-in solution, fetch from AI (Gemini)
+            const solutionBtn = questionElement.querySelector('.solution-btn');
+            const solutionSection = questionElement.querySelector('.solution-section');
+            solutionBtn.addEventListener('click', async function() {
+                if (solutionSection.style.display === 'none') {
+                    solutionSection.style.display = 'block';
+                    solutionBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+                    solutionBtn.disabled = true;
+                    try {
+                        const res = await fetch('/api/generate-solution', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: question.title,
+                                description: question.description,
+                                difficulty: question.difficulty
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        solutionSection.querySelector('.solution-approach').textContent = data.approach || '';
+                        solutionSection.querySelector('.solution-time-complexity').textContent = data.timeComplexity || '';
+                        solutionSection.querySelector('.solution-space-complexity').textContent = data.spaceComplexity || '';
+                        solutionSection.querySelector('.solution-code code').textContent = data.code || '';
+                        solutionSection.querySelector('.solution-explanation').textContent = data.explanation || '';
+                        solutionBtn.innerHTML = '<i class="fas fa-eye-slash me-2"></i>Hide Solution';
+                        solutionBtn.classList.remove('btn-success');
+                        solutionBtn.classList.add('btn-secondary');
+                    } catch (e) {
+                        alert('Failed to generate solution: ' + e.message);
+                        solutionSection.style.display = 'none';
+                        solutionBtn.innerHTML = '<i class="fas fa-code me-2"></i>View Solution';
+                    } finally {
+                        solutionBtn.disabled = false;
+                    }
+                } else {
+                    solutionSection.style.display = 'none';
+                    solutionBtn.innerHTML = '<i class="fas fa-code me-2"></i>View Solution';
+                    solutionBtn.classList.remove('btn-secondary');
+                    solutionBtn.classList.add('btn-success');
+                }
+            });
         }
         
         questionsList.appendChild(questionElement);

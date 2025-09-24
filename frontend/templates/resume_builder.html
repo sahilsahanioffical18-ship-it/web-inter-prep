@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Resume Builder - Web-Inter-Prep{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <style>
+    .resume-card{background:#2f3640;border:0;color:#eaeaea}
+    .resume-card .form-control{background:#3b4350;border-color:#4a5464;color:#eaeaea}
+    .resume-card .form-control:focus{border-color:#6ea8fe;box-shadow:none}
+    #resume-preview{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#222}
+    #resume-preview h2{margin-bottom:0}
+    #resume-preview h4{margin-top:16px;border-bottom:1px solid #eee;padding-bottom:6px}
+    @media print{
+        body{background:#fff}
+        .no-print{display:none}
+        #resume-preview{padding:0}
+    }
+    .tag{display:inline-block;background:#eef4ff;color:#1f4aff;border:1px solid #cfe1ff;padding:2px 8px;border-radius:12px;margin:2px;font-size:.85rem}
+    </style>
+    <div class="row">
+        <div class="col-lg-7 mb-4">
+            <div class="card shadow-sm resume-card">
+                <div class="card-body">
+                    <h3 class="mb-3"><i class="fas fa-file-alt me-2"></i>Resume Builder</h3>
+                    <p class="text-muted">Fill the fields below and export your resume as PDF. Use AI to craft a professional summary.</p>
+
+                    <form id="resume-form">
+                        <div class="mb-3">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="name" placeholder="John Doe" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" placeholder="john@example.com" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Phone</label>
+                                <input type="text" class="form-control" id="phone" placeholder="+1 555-555-5555">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Location</label>
+                                <input type="text" class="form-control" id="location" placeholder="City, Country">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Target Role</label>
+                                <input type="text" class="form-control" id="role" placeholder="Software Engineer">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Years of Experience</label>
+                                <input type="number" min="0" class="form-control" id="years" placeholder="2">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-0">Key Skills (comma separated)</label>
+                                <button type="button" id="ai-skills" class="btn btn-sm btn-outline-primary no-print"><i class="fas fa-wand-magic me-1"></i>Suggest Skills</button>
+                            </div>
+                            <input type="text" class="form-control" id="skills" placeholder="React, Node.js, SQL">
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-0">Professional Summary</label>
+                                <button type="button" id="ai-summary" class="btn btn-sm btn-outline-primary"><i class="fas fa-wand-magic me-1"></i>Generate with AI</button>
+                            </div>
+                            <textarea class="form-control" id="summary" rows="4" placeholder="Write a concise 3-4 sentence summary highlighting your strengths and achievements."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-0">Experience</label>
+                                <button type="button" id="ai-experience" class="btn btn-sm btn-outline-primary no-print"><i class="fas fa-wand-magic me-1"></i>Generate Bullets</button>
+                            </div>
+                            <textarea class="form-control" id="experience" rows="6" placeholder="Company – Role – Dates\n• Achievement/impact\n• Achievement/impact"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-0">Projects</label>
+                                <button type="button" id="ai-projects" class="btn btn-sm btn-outline-primary no-print"><i class="fas fa-wand-magic me-1"></i>Generate Bullets</button>
+                            </div>
+                            <textarea class="form-control" id="projects" rows="5" placeholder="Project – Tech – Outcome\n• What you built and impact"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Education</label>
+                            <textarea class="form-control" id="education" rows="3" placeholder="Degree – University – Year"></textarea>
+                        </div>
+
+                        <div class="text-end no-print">
+                            <button type="button" class="btn btn-success" id="export-btn"><i class="fas fa-file-pdf me-1"></i>Export PDF</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="mb-3">Live Preview</h5>
+                    <div id="resume-preview" class="border p-3" style="min-height: 500px; background: #fff">
+                        <p class="text-muted">Your resume preview will appear here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function escHtml(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+
+function buildPreview(){
+    const name = escHtml(document.getElementById('name').value);
+    const email = escHtml(document.getElementById('email').value);
+    const phone = escHtml(document.getElementById('phone').value);
+    const location = escHtml(document.getElementById('location').value);
+    const role = escHtml(document.getElementById('role').value);
+    const summary = escHtml(document.getElementById('summary').value).replace(/\n/g,'<br>');
+    const experience = escHtml(document.getElementById('experience').value).replace(/\n/g,'<br>');
+    const projects = escHtml(document.getElementById('projects').value).replace(/\n/g,'<br>');
+    const education = escHtml(document.getElementById('education').value).replace(/\n/g,'<br>');
+
+    const skills = escHtml(document.getElementById('skills').value)
+        .split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<span class="tag">${s}</span>`).join(' ');
+
+    const html = `
+        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:#222">
+            <h2 style="margin-bottom:0">${name}</h2>
+            <div style="color:#666">${role ? role + ' · ' : ''}${location} · ${email}${phone ? ' · ' + phone : ''}</div>
+            ${summary ? `<h4 style=\"margin-top:16px\">Summary</h4><p>${summary}</p>` : ''}
+            ${skills ? `<div style=\"margin-top:8px\">${skills}</div>` : ''}
+            ${experience ? `<h4 style=\"margin-top:16px\">Experience</h4><p>${experience}</p>` : ''}
+            ${projects ? `<h4 style=\"margin-top:16px\">Projects</h4><p>${projects}</p>` : ''}
+            ${education ? `<h4 style=\"margin-top:16px\">Education</h4><p>${education}</p>` : ''}
+        </div>`;
+    document.getElementById('resume-preview').innerHTML = html;
+}
+
+['name','email','phone','location','role','summary','experience','projects','education'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', buildPreview);
+});
+
+// Live preview updates automatically on input; explicit preview button removed.
+
+document.getElementById('ai-summary').addEventListener('click', async function(){
+    this.disabled = true; this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating...';
+    try{
+        const res = await fetch('/api/resume/summary',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                name: document.getElementById('name').value,
+                role: document.getElementById('role').value,
+                years: document.getElementById('years').value,
+                skills: document.getElementById('skills').value,
+                extras: document.getElementById('projects').value.slice(0,300)
+            })
+        });
+        const data = await res.json();
+        if(data.error){ throw new Error(data.error); }
+        document.getElementById('summary').value = data.summary || '';
+        buildPreview();
+    }catch(e){
+        alert('Failed to generate summary: ' + e.message);
+    }finally{
+        this.disabled = false; this.innerHTML = '<i class="fas fa-wand-magic me-1"></i>Generate with AI';
+    }
+});
+
+document.getElementById('export-btn').addEventListener('click', function(){
+    buildPreview();
+    const content = document.getElementById('resume-preview').innerHTML;
+    const w = window.open('', 'resume');
+    w.document.write('<html><head><title>Resume</title></head><body>'+content+'</body></html>');
+    w.document.close();
+    w.focus();
+    w.print();
+});
+
+async function callGemini(endpoint, payload){
+    const res = await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await res.json();
+    if(data.error){throw new Error(data.error);} return data;
+}
+
+document.getElementById('ai-skills').addEventListener('click', async function(){
+    this.disabled=true; this.innerHTML='<i class="fas fa-spinner fa-spin me-1"></i>Suggesting...';
+    try{
+        const data = await callGemini('/api/resume/skills',{
+            role: document.getElementById('role').value,
+            years: document.getElementById('years').value,
+            base: document.getElementById('skills').value
+        });
+        document.getElementById('skills').value = data.skills.join(', ');
+        buildPreview();
+    }catch(e){alert('Failed to suggest skills: '+e.message);} finally{this.disabled=false; this.innerHTML='<i class="fas fa-wand-magic me-1"></i>Suggest Skills';}
+});
+
+document.getElementById('ai-experience').addEventListener('click', async function(){
+    this.disabled=true; this.innerHTML='<i class="fas fa-spinner fa-spin me-1"></i>Generating...';
+    try{
+        const data = await callGemini('/api/resume/experience',{
+            role: document.getElementById('role').value,
+            years: document.getElementById('years').value,
+            skills: document.getElementById('skills').value,
+            current: document.getElementById('experience').value
+        });
+        document.getElementById('experience').value = data.bullets.join('\n');
+        buildPreview();
+    }catch(e){alert('Failed to generate experience: '+e.message);} finally{this.disabled=false; this.innerHTML='<i class="fas fa-wand-magic me-1"></i>Generate Bullets';}
+});
+
+document.getElementById('ai-projects').addEventListener('click', async function(){
+    this.disabled=true; this.innerHTML='<i class="fas fa-spinner fa-spin me-1"></i>Generating...';
+    try{
+        const data = await callGemini('/api/resume/projects',{
+            role: document.getElementById('role').value,
+            skills: document.getElementById('skills').value,
+            current: document.getElementById('projects').value
+        });
+        document.getElementById('projects').value = data.bullets.join('\n');
+        buildPreview();
+    }catch(e){alert('Failed to generate projects: '+e.message);} finally{this.disabled=false; this.innerHTML='<i class="fas fa-wand-magic me-1"></i>Generate Bullets';}
+});
+</script>
+{% endblock %}
