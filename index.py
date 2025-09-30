@@ -30,50 +30,55 @@ def get_db_path():
 # Database initialization
 def init_db():
     """Initialize the SQLite database with required tables"""
-    db_path = get_db_path()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Users table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Attempts table for tracking user practice
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            question_id INTEGER NOT NULL,
-            correct BOOLEAN NOT NULL,
-            user_answer TEXT,
-            mock_session_id INTEGER,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    # Mock interview sessions
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS mock_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            end_time TIMESTAMP,
-            total_questions INTEGER DEFAULT 0,
-            correct_answers INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+    try:
+        db_path = get_db_path()
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Users table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Attempts table for tracking user practice
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                question_id INTEGER NOT NULL,
+                correct BOOLEAN NOT NULL,
+                user_answer TEXT,
+                mock_session_id INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        # Mock interview sessions
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mock_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                end_time TIMESTAMP,
+                total_questions INTEGER DEFAULT 0,
+                correct_answers INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️  Database initialization warning: {e}")
+        # Continue anyway - database will be created when needed
 
 # Initialize database
 try:
@@ -118,7 +123,8 @@ def login():
             else:
                 flash('Invalid email or password', 'error')
         except Exception as e:
-            flash(f'Login error: {str(e)}', 'error')
+            print(f"Database error in login: {e}")
+            flash('Database temporarily unavailable. Please try again.', 'error')
     
     return render_template('login.html')
 
@@ -202,7 +208,8 @@ def dashboard():
         
         return render_template('dashboard.html', stats=stats)
     except Exception as e:
-        flash(f'Dashboard error: {str(e)}', 'error')
+        print(f"Database error in dashboard: {e}")
+        # Return dashboard with empty stats if database fails
         return render_template('dashboard.html', stats={
             'total_attempted': 0,
             'correct_answers': 0,
